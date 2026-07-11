@@ -18,3 +18,31 @@ This file is in Excel 2003 XML `.xls` format so it can be opened in Microsoft Ex
 5. Commit with a date-based message (example: `Update spares database 2026-07-12`).
 
 Optional: keep daily history files under `data/history/`.
+
+## Live System
+
+The live app is now at:
+
+- `index.html`
+
+Enable GitHub Pages:
+
+1. Open repository settings.
+2. Go to Pages.
+3. Source: Deploy from a branch.
+4. Branch: `main` and folder `/ (root)`.
+5. Save.
+
+After Pages is enabled, open the site URL shown by GitHub Pages.
+
+## Daily Update Routine (Phone)
+
+1. Open live app.
+2. Update spare items.
+3. Use `☁ Export GitHub Sync`.
+4. Upload these files into repository `data/`:
+	- `CEET_Spares_Database.json`
+	- `CEET_Spares_Database.xls`
+	- optional dated file into `data/history/`
+5. Commit in GitHub app/web.
+6. In live app, press `☁ Load GitHub DB` to verify latest data.

@@ -208,6 +208,7 @@ button{cursor:pointer}
   <label>⬆ Restore JSON<input id="restore" type="file" accept=".json,application/json"></label>
   <button id="photoReport">🖼 Photo Report</button>
   <button id="mergeDupes">🔀 Merge Duplicate Codes</button>
+  <button id="recompressPhotos">🗜 Recompress Existing Photos</button>
   <button id="reset" class="danger">↺ Reset Original</button>
   <button id="copyBackup" class="gold">📋 Copy Text Backup</button>
   <div id="saveState" class="saveState">Saved locally in browser</div>
@@ -448,6 +449,7 @@ return `<article class="card${open?' open':''}${ed?' editing':''}" data-status="
 function render(){const dups=dupInfo();const dn=$('dupNotice');if(dups.size){const codes=[...dups.entries()].map(([c,nums])=>`“${esc(data[nums[0]-1].stockCode)}” ×${nums.length} (items #${nums.join(', #')})`);dn.innerHTML='<span>⚠️</span><span><b>'+dups.size+' stock code'+(dups.size>1?'s are':' is')+' used by more than one item:</b> '+codes.join('; ')+'. Each is shown with a <b>unit badge</b> (e.g. 1/2). If they are the <b>same part with different serial numbers</b>, keeping them as separate units is correct. If they are really one stock line, use <b>⋯ → 🔀 Merge Duplicate Codes</b> to combine them (quantities added, serials kept in Remarks).</span>';dn.style.display='flex'}else{dn.style.display='none'}const rows=data.map((r,i)=>({r,i})).filter(x=>visible(x.r));$('list').innerHTML=rows.length?rows.map(x=>card(x.r,x.i,dups)).join(''):'<div class="empty">No matching spare items.</div>';$('listHead').style.display=rows.length?'':'none';stats()}
 function toast(t){const x=$('toast');x.textContent=t;x.classList.add('show');setTimeout(()=>x.classList.remove('show'),2600)}
 function dataUrlBytes(u){const b=(u.split(',')[1]||'');const p=b.endsWith('==')?2:b.endsWith('=')?1:0;return Math.max(0,(b.length*3/4)-p)}
+async function dataUrlToFile(u,name){const b=await (await fetch(u)).blob();return new File([b],name,{type:b.type||'image/jpeg'})}
 function compress(file,max=PHOTO_MAX_DIM,startQ=PHOTO_START_QUALITY,targetBytes=PHOTO_TARGET_BYTES,minQ=PHOTO_MIN_QUALITY){
   return new Promise((res,rej)=>{
     const fr=new FileReader();
@@ -485,6 +487,39 @@ function compress(file,max=PHOTO_MAX_DIM,startQ=PHOTO_START_QUALITY,targetBytes=
     fr.onerror=rej;
     fr.readAsDataURL(file);
   });
+}
+async function recompressExistingPhotos(){
+  const total=data.reduce((a,r)=>a+(Array.isArray(r.photos)?r.photos.length:0),0);
+  if(!total){toast('No photos to recompress');return}
+  if(!confirm(`Recompress ${total} existing photo(s)? This will reduce file size and may slightly reduce image quality.`)) return;
+  let done=0,changed=0,before=0,after=0;
+  $('saveState').textContent=`Recompressing photos... 0/${total}`;
+  for(let i=0;i<data.length;i++){
+    const row=data[i];
+    if(!Array.isArray(row.photos)) continue;
+    for(let j=0;j<row.photos.length;j++){
+      const src=row.photos[j];
+      if(typeof src!=='string' || !src.startsWith('data:image/')){done++;continue}
+      const oldBytes=dataUrlBytes(src);
+      before+=oldBytes;
+      try{
+        const f=await dataUrlToFile(src,`photo_${i+1}_${j+1}.jpg`);
+        const out=await compress(f);
+        const newBytes=dataUrlBytes(out);
+        after+=newBytes;
+        if(newBytes<oldBytes){row.photos[j]=out;changed++;}
+      }catch(e){
+        after+=oldBytes;
+      }
+      done++;
+      if(done%3===0||done===total)$('saveState').textContent=`Recompressing photos... ${done}/${total}`;
+    }
+  }
+  save();
+  render();
+  const reduced=Math.max(0,before-after);
+  const reducedMb=(reduced/1024/1024).toFixed(2);
+  toast(`Recompressed ${changed}/${total} photos, saved ${reducedMb} MB`);
 }
 async function shareBlob(blob,name){try{const f=new File([blob],name,{type:blob.type});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return}const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove()},1200)}catch(e){if(e.name!=='AbortError')alert('Unable to save file: '+e.message)}}
 function xmlEsc(v){
@@ -674,6 +709,7 @@ $('exportCsv').onclick=()=>shareBlob(new Blob(['\ufeff',csvText()],{type:'text/c
 $('exportPdf').onclick=()=>window.print();
 $('backup').onclick=()=>shareBlob(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),'CEET_Spares_Backup.json');
 $('copyBackup').onclick=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(data));toast('Backup copied — paste into Notes')}catch(e){prompt('Copy this backup text:',JSON.stringify(data))}};
+$('recompressPhotos').onclick=recompressExistingPhotos;
 $('restore').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const a=JSON.parse(r.result);if(Array.isArray(a)&&confirm('Replace current data with this backup?')){data=a.map(normalize);save();render();toast('Backup restored')}}catch(e){alert('Invalid JSON backup')}};r.readAsText(f);e.target.value=''};
 $('importFile').onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
